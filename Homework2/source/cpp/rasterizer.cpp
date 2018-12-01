@@ -9,6 +9,24 @@
 
 #include <cassert>
 
+// After his r = m.
+void equalizeMatrices(double r[4][4], double m[4][4]) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            r[i][j] = m[i][j];
+        }
+    }
+}
+
+// After this r is a zero matrix.
+void makeZeroMatrix(double r[4][4]) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < 4; j++) {
+            r[i][j] = 0;
+        }
+    }
+}
+
 /**
  * @brief Namespace for modeling transformations.
  */
@@ -22,6 +40,7 @@ namespace model_tr {
  * @param t
  */
 void getTranslationMatrix(double r[4][4], Translation t) {
+    makeIdentityMatrix(r);
     r[0][3] = t.tx;
     r[1][3] = t.ty;
     r[2][3] = t.tz;
@@ -37,6 +56,7 @@ void getTranslationMatrix(double r[4][4], Translation t) {
  * @param s
  */
 void getScalingMatrix(double r[4][4], Scaling s) {
+    makeIdentityMatrix(r);
     r[0][0] = s.sx;
     r[1][1] = s.sy;
     r[2][2] = s.sz;
@@ -107,6 +127,7 @@ void getRotationZMatrix(double r[4][4], Rotation rot) {
  * @param rot
  */
 void getRotationMatrix(double r[4][4], Rotation rot) {
+    makeIdentityMatrix(r);
     double rotx[4][4], roty[4][4], rotz[4][4];
     double i1[4][4], i2[4][4], i3[4][4];
 
@@ -162,7 +183,7 @@ void test_modeling_transforms() {
     makeIdentityMatrix(r1);
 
     double val = 1 / std::sqrt(3);
-    Rotation rot {
+    Rotation rot = {
         240,
         val,
         val,
@@ -208,7 +229,7 @@ void test_modeling_transforms() {
     v[1] = -2;
     v[2] = 3;
 
-    Translation t {
+    Translation t = {
         2,
         0,
         -10
@@ -225,7 +246,7 @@ void test_modeling_transforms() {
     );
     num_tests++;
 
-    Scaling s {
+    Scaling s = {
         0.5, -5, 0
     };
 
@@ -295,9 +316,95 @@ void initializeImage(Camera cam) {
 	You can define helper functions inside this file (rasterizer.cpp) only.
 	Using types in "hw2_types.h" and functions in "hw2_math_ops.cpp" will speed you up while working.
 */
+void modelingTransformation(Model model) {
+    // Have to keep new vertice coordinates afeter transformations.
+    Vec3 triangleVertices[model.numberOfTriangles][3];
+    
+    // transformMatrix is the result of all the transform operations.
+    // operationMatrix is a tmp matrix to hold new transform operation.
+    double transformMatrix[4][4], operationMatrix[4][4], tmpMatrix[4][4];
+    makeIdentityMatrix(transformMatrix);
+    makeIdentityMatrix(operationMatrix);
+    
+    // Copy current vertices coordiates of the model.
+    for (int i = 0; i < model.numberOfTriangles; i++) {
+        triangleVertices[i][0] = vertices[model.triangles[i].vertexIds[0]];
+        triangleVertices[i][1] = vertices[model.triangles[i].vertexIds[1]];
+        triangleVertices[i][2] = vertices[model.triangles[i].vertexIds[2]];
+    }
+    
+    // Form the transform matrix which is going to be applied to all vertices.
+    for (int i = 0; i < model.numberOfTransformations; i++) {
+        switch (model.transformationTypes[i]) {
+            case 'r':
+                model_tr::getRotationMatrix(operationMatrix, rotations[model.transformationIDs[i]]);
+                break;
+            case 't':
+                model_tr::getTranslationMatrix(operationMatrix, translations[model.transformationIDs[i]]);
+                break;
+            case 's':
+                model_tr::getScalingMatrix(operationMatrix, scalings[model.transformationIDs[i]]);
+                break;
+        }
+        
+        multiplyMatrixWithMatrix(tmpMatrix, operationMatrix, transformMatrix);
+        equalizeMatrices(transformMatrix, tmpMatrix);
+        
+        // Prints out the current operationMatrix and last version of transformMatrix.
+//
+//        std::cout << "Operation Matrix" << std::endl;
+//        std::cout << operationMatrix[1][1] << ' ';
+//        std::cout << operationMatrix[0][3] << ' ';
+//        std::cout << operationMatrix[1][3] << ' ';
+//        std::cout << operationMatrix[2][3] << std::endl;
+//        std::cout << "Transform Matrix" << std::endl;
+//        std::cout << transformMatrix[1][1] << ' ';
+//        std::cout << transformMatrix[0][3] << ' ';
+//        std::cout << transformMatrix[1][3] << ' ';
+//        std::cout << transformMatrix[2][3] << std::endl;
+
+    }
+    
+    // Apply transformMatrix to all vertices.
+    double point[4], tmpVec[4];
+    for (int i = 0; i < model.numberOfTriangles; i++) {
+        for (int j = 0; j < 3; j++) {
+            point[0] = triangleVertices[i][j].x;
+            point[1] = triangleVertices[i][j].y;
+            point[2] = triangleVertices[i][j].z;
+            point[3] = 1;
+            
+            multiplyMatrixWithVec4d(tmpVec, transformMatrix, point);
+            
+            triangleVertices[i][j].x = tmpVec[0];
+            triangleVertices[i][j].y = tmpVec[1];
+            triangleVertices[i][j].z = tmpVec[2];
+        }
+    }
+    
+    // Print out transformed vertecies of each triangle of the model.
+    for (int i = 0; i < model.numberOfTriangles; i++) {
+        std::cout << "Triangle: " << i << std::endl;
+        for (int j = 0; j < 3; j++) {
+            std::cout << "Vertex " << j << ": ";
+            std::cout << triangleVertices[i][j].x << ' ';
+            std::cout << triangleVertices[i][j].y << ' ';
+            std::cout << triangleVertices[i][j].z << std::endl;
+        }
+    }
+}
+
 void forwardRenderingPipeline(Camera cam) {
     // TODO: IMPLEMENT HERE
-    tests::test_modeling_transforms();
+    //tests::test_modeling_transforms();
+    
+    std::cout << "Number of models " << numberOfModels << std::endl;
+    
+    // Transforms every model in the scene.
+    for (int i = 0; i < numberOfModels; i++) {
+        modelingTransformation(models[i]);
+    }
+
 }
 
 
@@ -315,6 +422,9 @@ int main(int argc, char **argv) {
 
     image = 0;
 
+    // TODO:
+    // remove this later:
+    numberOfCameras = 1;
     for (i = 0; i < numberOfCameras; i++) {
 
         // allocate memory for image
