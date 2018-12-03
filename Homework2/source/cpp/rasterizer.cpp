@@ -277,7 +277,7 @@ void draw_line_v2(Vec3 p, Vec3 q) {
     int y0 = static_cast<int>(p.y);
     int x = x0;
 
-    double d = (y0 - y1) + 0.5 * (x1 - x0);
+    double d = (x0 - x1) + 0.5 * (y1 - y0);
 
     Color c0, c1;
     c0.r = colors[p.colorId].r;
@@ -292,9 +292,9 @@ void draw_line_v2(Vec3 p, Vec3 q) {
 
     // Directly compute color increment
     Color dc;
-    dc.r = (c1.r - c0.r) / (x1 - x0);
-    dc.g = (c1.g - c0.g) / (x1 - x0);
-    dc.b = (c1.b - c0.b) / (x1 - x0);
+    dc.r = (c1.r - c0.r) / (y1 - y0);
+    dc.g = (c1.g - c0.g) / (y1 - y0);
+    dc.b = (c1.b - c0.b) / (y1 - y0);
 
     for (int y = y0; y < y1; y++) {
 
@@ -306,9 +306,9 @@ void draw_line_v2(Vec3 p, Vec3 q) {
 
         if (d < 0) {
             x = x + 1;
-            d += (y0 - y1) + (x1 - x0);
+            d += (x0 - x1) + (y1 - y0);
         } else {
-            d += (y0 - y1);
+            d += (x0 - x1);
         }
         // Update color
         c.r += dc.r;
@@ -330,6 +330,11 @@ void draw_line_v3(Vec3 p, Vec3 q) {
     int x0 = static_cast<int>(p.x);
     int y0 = static_cast<int>(p.y);
     int y = y0;
+
+    if (y0 < y1) {
+        draw_line_v3(q,p);
+        return;
+    }
 
     double d = (y1 - y0) + 0.5 * (x1 - x0);
 
@@ -360,9 +365,9 @@ void draw_line_v3(Vec3 p, Vec3 q) {
 
         if (d < 0) {
             y = y - 1;
-            d += (y1 - y0) + (x1 - x0);
+            d += (y0 - y1) + (x1 - x0);
         } else {
-            d += (y1 - y0);
+            d += (y0 - y1);
         }
         // Update color
         c.r += dc.r;
@@ -385,7 +390,12 @@ void draw_line_v4(Vec3 p, Vec3 q) {
     int y0 = static_cast<int>(p.y);
     int x = x0;
 
-    double d = (y1 - y0) + 0.5 * (x1 - x0);
+    if (y0 < y1) {
+        draw_line_v4(q,p);
+        return;
+    }
+
+    double d = (x1 - x0) + 0.5 * (y1 - y0);
 
     Color c0, c1;
     c0.r = colors[p.colorId].r;
@@ -414,9 +424,9 @@ void draw_line_v4(Vec3 p, Vec3 q) {
 
         if (d < 0) {
             x = x + 1;
-            d += (y1 - y0) + (x1 - x0);
+            d += (x0 - x1) + (y1 - y0);
         } else {
-            d += (y1 - y0);
+            d += (x0 - x1);
         }
         // Update color
         c.r += dc.r;
@@ -481,6 +491,11 @@ void draw_line(Vec3 p, Vec3 q) {
     int y1 = static_cast<int>(q.y);
     int x0 = static_cast<int>(p.x);
     int y0 = static_cast<int>(p.y);
+
+    if (x0 > x1 && y0 > y1) {
+        // Reverse the line
+        draw_line(q,p);
+    }
 
     // Check for infinite slope
     if (x0 == x1) {
@@ -627,11 +642,19 @@ void test_drawing_functions() {
 
     Vec3 p3 = {100,200, 300, 2};
 
+    Vec3 p4 = {400, 200, 200, 1};
+    Vec3 p5 = {300, 500, 300, 1};
 
+
+    // Draw first triangle
     rasterize::draw::draw_line(p1, p2);
-    rasterize::draw::draw_line(p3, p2);
-    rasterize::draw::draw_line(p1, p3);
+    rasterize::draw::draw_line(p2, p3);
+    rasterize::draw::draw_line(p3, p1);
 
+    // Draw second triangle
+    rasterize::draw::draw_line(p1, p4);
+    rasterize::draw::draw_line(p4, p5);
+    rasterize::draw::draw_line(p5, p1);
 
 }
 
