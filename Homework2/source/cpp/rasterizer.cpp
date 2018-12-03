@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include <vector>
 #include "hw2_types.h"
 #include "hw2_math_ops.h"
 #include "hw2_file_ops.h"
@@ -294,11 +295,16 @@ int backfaceCullingSetting = 0;
 
 Color **image;
 
-
+// Have to keep new vertice coordinates afeter transformations.
+Vec3 triangleVertices[100000][3];
 
 /*
 	Initializes image with background color
 */
+void viewportTransformation(double viewportMatrix[4][4], Camera cam);
+void projectionTransformation(double projectionMatrix[4][4], Camera cam);
+void cameraTransformation(double cameraMatrix[4][4], Camera cam);
+
 void initializeImage(Camera cam) {
     int i, j;
 
@@ -316,22 +322,12 @@ void initializeImage(Camera cam) {
 	You can define helper functions inside this file (rasterizer.cpp) only.
 	Using types in "hw2_types.h" and functions in "hw2_math_ops.cpp" will speed you up while working.
 */
-void modelingTransformation(Model model) {
-    // Have to keep new vertice coordinates afeter transformations.
-    Vec3 triangleVertices[model.numberOfTriangles][3];
-    
+void modelingTransformation(double modelTransMatrix[4][4], Model model) {
     // transformMatrix is the result of all the transform operations.
     // operationMatrix is a tmp matrix to hold new transform operation.
     double transformMatrix[4][4], operationMatrix[4][4], tmpMatrix[4][4];
     makeIdentityMatrix(transformMatrix);
     makeIdentityMatrix(operationMatrix);
-    
-    // Copy current vertices coordiates of the model.
-    for (int i = 0; i < model.numberOfTriangles; i++) {
-        triangleVertices[i][0] = vertices[model.triangles[i].vertexIds[0]];
-        triangleVertices[i][1] = vertices[model.triangles[i].vertexIds[1]];
-        triangleVertices[i][2] = vertices[model.triangles[i].vertexIds[2]];
-    }
     
     // Form the transform matrix which is going to be applied to all vertices.
     for (int i = 0; i < model.numberOfTransformations; i++) {
@@ -365,7 +361,75 @@ void modelingTransformation(Model model) {
 
     }
     
-    // Apply transformMatrix to all vertices.
+    equalizeMatrices(modelTransMatrix, transformMatrix);
+}
+
+void viewTransformation(double viewTransMatrix[4][4], Camera cam) {
+    double viewportMatrix[4][4], projectionMatrix[4][4], cameraMatrix[4][4];
+    double tmpMatrix[4][4];
+    
+    viewportTransformation(viewportMatrix, cam);
+    projectionTransformation(projectionMatrix, cam);
+    cameraTransformation(cameraMatrix, cam);
+    
+    multiplyMatrixWithMatrix(tmpMatrix, projectionMatrix, cameraMatrix);
+    multiplyMatrixWithMatrix(viewTransMatrix, viewportMatrix, tmpMatrix);
+}
+
+void viewportTransformation(double viewportMatrix[4][4], Camera cam) {
+    makeIdentityMatrix(viewportMatrix);
+    viewportMatrix[0][0] = cam.sizeX / 2.0;
+    viewportMatrix[1][1] = cam.sizeY / 2.0;
+    viewportMatrix[0][3] = (cam.sizeX - 1) / 2.0;
+    viewportMatrix[1][3] = (cam.sizeY - 1) / 2.0;
+}
+
+void projectionTransformation(double projectionMatrix[4][4], Camera cam) {
+    makeIdentityMatrix(projectionMatrix);
+    projectionMatrix[3][3] = 0;
+    projectionMatrix[0][0] = (2 * cam.n) / (cam.r - cam.l);
+    projectionMatrix[0][2] = - (cam.l + cam.r) / (cam.l - cam.r);
+    projectionMatrix[1][1] = (2 * cam.n) / (cam.t - cam.b);
+    projectionMatrix[1][2] = - (cam.b + cam.t) / (cam.b - cam.t);
+    projectionMatrix[2][2] = (cam.f + cam.n) / (cam.n - cam.f);
+    projectionMatrix[2][3] = - (2 * cam.f * cam.n) / (cam.f - cam.n);
+    projectionMatrix[3][2] = -1;
+}
+
+void cameraTransformation(double cameraMatrix[4][4], Camera cam) {
+    double tmpRot[4][4], tmpTrans[4][4];
+    makeIdentityMatrix(tmpRot);
+    makeIdentityMatrix(tmpTrans);
+    
+    tmpRot[0][0] = cam.u.x;
+    tmpRot[1][0] = cam.v.x;
+    tmpRot[2][0] = cam.w.x;
+    tmpRot[0][1] = cam.u.y;
+    tmpRot[1][1] = cam.v.y;
+    tmpRot[2][1] = cam.w.y;
+    tmpRot[0][2] = cam.u.z;
+    tmpRot[1][2] = cam.v.z;
+    tmpRot[2][2] = cam.w.z;
+    
+    tmpTrans[0][3] = -cam.pos.x;
+    tmpTrans[1][3] = -cam.pos.y;
+    tmpTrans[2][3] = -cam.pos.z;
+    
+    multiplyMatrixWithMatrix(cameraMatrix, tmpRot, tmpTrans);
+}
+
+void applyTransformations(Model model, double viewTransMatrix[4][4], double modelTransMatrix[4][4]) {
+    
+    // Copy current vertices coordiates of the model.
+    for (int i = 0; i < model.numberOfTriangles; i++) {
+        triangleVertices[i][0] = vertices[model.triangles[i].vertexIds[0]];
+        triangleVertices[i][1] = vertices[model.triangles[i].vertexIds[1]];
+        triangleVertices[i][2] = vertices[model.triangles[i].vertexIds[2]];
+    }
+    
+    double operationMatrix[4][4];
+    multiplyMatrixWithMatrix(operationMatrix, viewTransMatrix, modelTransMatrix);
+    
     double point[4], tmpVec[4];
     for (int i = 0; i < model.numberOfTriangles; i++) {
         for (int j = 0; j < 3; j++) {
@@ -374,14 +438,16 @@ void modelingTransformation(Model model) {
             point[2] = triangleVertices[i][j].z;
             point[3] = 1;
             
-            multiplyMatrixWithVec4d(tmpVec, transformMatrix, point);
+            multiplyMatrixWithVec4d(tmpVec, operationMatrix, point);
             
-            triangleVertices[i][j].x = tmpVec[0];
-            triangleVertices[i][j].y = tmpVec[1];
-            triangleVertices[i][j].z = tmpVec[2];
+            triangleVertices[i][j].x = tmpVec[0] / tmpVec[3];
+            triangleVertices[i][j].y = tmpVec[1] / tmpVec[3];
+            triangleVertices[i][j].z = tmpVec[2] / tmpVec[3];
         }
     }
-    
+}
+
+void printModelVertices(Model model) {
     // Print out transformed vertecies of each triangle of the model.
     for (int i = 0; i < model.numberOfTriangles; i++) {
         std::cout << "Triangle: " << i << std::endl;
@@ -394,17 +460,26 @@ void modelingTransformation(Model model) {
     }
 }
 
+void rasterize() {
+    
+}
+
 void forwardRenderingPipeline(Camera cam) {
     // TODO: IMPLEMENT HERE
     //tests::test_modeling_transforms();
     
-    std::cout << "Number of models " << numberOfModels << std::endl;
     
-    // Transforms every model in the scene.
+    double viewTransMatrix[4][4];
+    double modelTransMatrix[4][4];
+    
+    viewTransformation(viewTransMatrix, cam);
+    
     for (int i = 0; i < numberOfModels; i++) {
-        modelingTransformation(models[i]);
+        modelingTransformation(modelTransMatrix, models[i]);
+        applyTransformations(models[i], viewTransMatrix, modelTransMatrix);
+        printModelVertices(models[i]);
+        rasterize();
     }
-
 }
 
 
@@ -450,7 +525,6 @@ int main(int argc, char **argv) {
                 exit(1);
             }
         }
-
 
         // initialize image with basic values
         initializeImage(cameras[i]);
