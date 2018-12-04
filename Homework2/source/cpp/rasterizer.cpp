@@ -2,12 +2,46 @@
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include <vector>
 #include "hw2_types.h"
 #include "hw2_math_ops.h"
 #include "hw2_file_ops.h"
 #include <iostream>
 
 #include <cassert>
+
+// Globals
+Color **image;
+
+Camera cameras[100];
+int numberOfCameras = 0;
+
+Model models[1000];
+int numberOfModels = 0;
+
+Color colors[100000];
+int numberOfColors = 0;
+
+Translation translations[1000];
+int numberOfTranslations = 0;
+
+Rotation rotations[1000];
+int numberOfRotations = 0;
+
+Scaling scalings[1000];
+int numberOfScalings = 0;
+
+Vec3 vertices[100000];
+int numberOfVertices = 0;
+
+Color backgroundColor;
+
+// backface culling setting, default disabled
+int backfaceCullingSetting = 0;
+
+
+// Have to keep new vertex coordinates after transformations.
+Vec3 triangleVertices[100000][3];
 
 // After his r = m.
 void equalizeMatrices(double r[4][4], double m[4][4]) {
@@ -153,6 +187,404 @@ void getRotationMatrix(double r[4][4], Rotation rot) {
 }; // namespace model_tr
 
 /**
+ * @brief Namespace for rasterization functions.
+ */
+namespace rasterize {
+
+/**
+ * @brief Namespace for drawing pixels, lines and triangles.
+ */
+namespace draw {
+
+/**
+ * @brief Draw a pixel on the screen
+ *
+ * @param x x-coordinate of the image plane
+ * @param y y-coordinate of the image plane
+ * @param c The color to write
+ */
+void draw_pixel(int x, int y, Color c) {
+    image[x][y].r = c.r;
+    image[x][y].g = c.g;
+    image[x][y].b = c.b;
+}
+
+/**
+ * @brief Draw a line with [0,1) slope.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line_v1(Vec3 p, Vec3 q) {
+
+    int x1 = static_cast<int>(q.x);
+    int y1 = static_cast<int>(q.y);
+    int x0 = static_cast<int>(p.x);
+    int y0 = static_cast<int>(p.y);
+    int y = y0;
+
+    if (x0 > x1) {
+        draw_line_v1(q, p);
+        return;
+    }
+
+    double d = (y0 - y1) + 0.5 * (x1 - x0);
+
+    Color c0, c1;
+    c0.r = colors[p.colorId].r;
+    c0.g = colors[p.colorId].g;
+    c0.b = colors[p.colorId].b;
+
+    c1.r = colors[q.colorId].r;
+    c1.g = colors[q.colorId].g;
+    c1.b = colors[q.colorId].b;
+
+    Color c = c0;
+
+    // Directly compute color increment
+    Color dc;
+    dc.r = (c1.r - c0.r) / (x1 - x0);
+    dc.g = (c1.g - c0.g) / (x1 - x0);
+    dc.b = (c1.b - c0.b) / (x1 - x0);
+
+    for (int x = x0; x < x1; x++) {
+
+        draw_pixel(x, y, {
+                std::round(c.r),
+                std::round(c.g),
+                std::round(c.b)
+                });
+
+        if (d < 0) {
+            y = y + 1;
+            d += (y0 - y1) + (x1 - x0);
+        } else {
+            d += (y0 - y1);
+        }
+        // Update color
+        c.r += dc.r;
+        c.g += dc.g;
+        c.b += dc.b;
+    }
+} 
+
+/**
+ * @brief Draw a line with [1,+inf) slope.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line_v2(Vec3 p, Vec3 q) {
+    int x1 = static_cast<int>(q.x);
+    int y1 = static_cast<int>(q.y);
+    int x0 = static_cast<int>(p.x);
+    int y0 = static_cast<int>(p.y);
+    int x = x0;
+    
+    if (x0 > x1) {
+        draw_line_v2(q,p);
+        return;
+    }
+
+    double d = (x0 - x1) + 0.5 * (y1 - y0);
+
+    Color c0, c1;
+    c0.r = colors[p.colorId].r;
+    c0.g = colors[p.colorId].g;
+    c0.b = colors[p.colorId].b;
+
+    c1.r = colors[q.colorId].r;
+    c1.g = colors[q.colorId].g;
+    c1.b = colors[q.colorId].b;
+
+    Color c = c0;
+
+    // Directly compute color increment
+    Color dc;
+    dc.r = (c1.r - c0.r) / (y1 - y0);
+    dc.g = (c1.g - c0.g) / (y1 - y0);
+    dc.b = (c1.b - c0.b) / (y1 - y0);
+
+    for (int y = y0; y < y1; y++) {
+
+        draw_pixel(x, y, {
+                std::round(c.r),
+                std::round(c.g),
+                std::round(c.b)
+                });
+
+        if (d < 0) {
+            x = x + 1;
+            d += (x0 - x1) + (y1 - y0);
+        } else {
+            d += (x0 - x1);
+        }
+        // Update color
+        c.r += dc.r;
+        c.g += dc.g;
+        c.b += dc.b;
+    }
+} 
+
+/**
+ * @brief Draw a line with [-1, 0) slope.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line_v3(Vec3 p, Vec3 q) {
+
+    int x1 = static_cast<int>(q.x);
+    int y1 = static_cast<int>(q.y);
+    int x0 = static_cast<int>(p.x);
+    int y0 = static_cast<int>(p.y);
+    int y = y0;
+
+    if (x0 > x1) {
+        draw_line_v3(q,p);
+        return;
+    }
+
+    double d = (y1 - y0) + 0.5 * (x1 - x0);
+
+    Color c0, c1;
+    c0.r = colors[p.colorId].r;
+    c0.g = colors[p.colorId].g;
+    c0.b = colors[p.colorId].b;
+
+    c1.r = colors[q.colorId].r;
+    c1.g = colors[q.colorId].g;
+    c1.b = colors[q.colorId].b;
+
+    Color c = c0;
+
+    // Directly compute color increment
+    Color dc;
+    dc.r = (c1.r - c0.r) / (x1 - x0);
+    dc.g = (c1.g - c0.g) / (x1 - x0);
+    dc.b = (c1.b - c0.b) / (x1 - x0);
+
+    for (int x = x0; x < x1; x++) {
+
+        draw_pixel(x, y, {
+                std::round(c.r),
+                std::round(c.g),
+                std::round(c.b)
+                });
+
+        if (d < 0) {
+            y = y - 1;
+            d += (y1 - y0) + (x1 - x0);
+        } else {
+            d += (y1 - y0);
+        }
+        // Update color
+        c.r += dc.r;
+        c.g += dc.g;
+        c.b += dc.b;
+    }
+} 
+
+/**
+ * @brief Draw a line with (-inf, -1) slope.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line_v4(Vec3 p, Vec3 q) {
+
+    int x1 = static_cast<int>(q.x);
+    int y1 = static_cast<int>(q.y);
+    int x0 = static_cast<int>(p.x);
+    int y0 = static_cast<int>(p.y);
+    int x = x0;
+
+    if (x0 > x1) {
+        draw_line_v4(q,p);
+        return;
+    }
+
+    double d = (x0 - x1) + 0.5 * (y0 - y1);
+
+    Color c0, c1;
+    c0.r = colors[p.colorId].r;
+    c0.g = colors[p.colorId].g;
+    c0.b = colors[p.colorId].b;
+
+    c1.r = colors[q.colorId].r;
+    c1.g = colors[q.colorId].g;
+    c1.b = colors[q.colorId].b;
+
+    Color c = c0;
+
+    // Directly compute color increment
+    Color dc;
+    dc.r = (c1.r - c0.r) / (y1 - y0);
+    dc.g = (c1.g - c0.g) / (y1 - y0);
+    dc.b = (c1.b - c0.b) / (y1 - y0);
+
+    for (int y = y0; y > y1; y--) {
+
+        draw_pixel(x, y, {
+                std::round(c.r),
+                std::round(c.g),
+                std::round(c.b)
+                });
+
+        if (d < 0) {
+            x = x + 1;
+            d += (x0 - x1) + (y0 - y1);
+        } else {
+            d += (x0 - x1);
+        }
+        // Update color
+        c.r += dc.r;
+        c.g += dc.g;
+        c.b += dc.b;
+    }
+}
+
+/**
+ * @brief Draw a line with -inf or +inf  slope.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line_v5(Vec3 p, Vec3 q) {
+
+    int y1 = static_cast<int>(q.y);
+    int y0 = static_cast<int>(p.y);
+    int x = static_cast<int>(p.x);
+
+    if (y0 > y1) {
+        draw_line_v5(q, p);
+        return;
+    }
+
+    Color c0, c1;
+    c0.r = colors[p.colorId].r;
+    c0.g = colors[p.colorId].g;
+    c0.b = colors[p.colorId].b;
+
+    c1.r = colors[q.colorId].r;
+    c1.g = colors[q.colorId].g;
+    c1.b = colors[q.colorId].b;
+
+    Color c = c0;
+
+    // Directly compute color increment
+    // Change x1-x0 to y1-y0
+    
+    Color dc;
+    dc.r = (c1.r - c0.r) / (y1 - y0);
+    dc.g = (c1.g - c0.g) / (y1 - y0);
+    dc.b = (c1.b - c0.b) / (y1 - y0);
+
+
+    for (int y = y0; y != y1; y++) {
+
+        draw_pixel(x, y, {
+                std::round(c.r),
+                std::round(c.g),
+                std::round(c.b)
+                });
+
+        // Update color
+        c.r += dc.r;
+        c.g += dc.g;
+        c.b += dc.b;
+    }
+}
+
+/**
+ * @brief Draw a line with 0 slope.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line_v6(Vec3 p, Vec3 q) {
+
+    int x1 = static_cast<int>(q.x);
+    int x0 = static_cast<int>(p.x);
+    int y = static_cast<int>(p.y);
+
+    if (x0 > x1) {
+        draw_line_v6(q, p);
+    }
+
+    Color c0, c1;
+    c0.r = colors[p.colorId].r;
+    c0.g = colors[p.colorId].g;
+    c0.b = colors[p.colorId].b;
+
+    c1.r = colors[q.colorId].r;
+    c1.g = colors[q.colorId].g;
+    c1.b = colors[q.colorId].b;
+
+    Color c = c0;
+
+    // Directly compute color increment
+    
+    Color dc;
+    dc.r = (c1.r - c0.r) / (x1 - x0);
+    dc.g = (c1.g - c0.g) / (x1 - x0);
+    dc.b = (c1.b - c0.b) / (x1 - x0);
+
+
+    for (int x = x0; x != x1; x++) {
+
+        draw_pixel(x, y, {
+                std::round(c.r),
+                std::round(c.g),
+                std::round(c.b)
+                });
+
+        // Update color
+        c.r += dc.r;
+        c.g += dc.g;
+        c.b += dc.b;
+    }
+}
+
+/**
+ * @brief Draws the line using the appropriate helper
+ *  draw function.
+ *
+ * @param p A Vec3
+ * @param q Another Vec3
+ */
+void draw_line(Vec3 p, Vec3 q) {
+    int x1 = static_cast<int>(q.x);
+    int y1 = static_cast<int>(q.y);
+    int x0 = static_cast<int>(p.x);
+    int y0 = static_cast<int>(p.y);
+
+    if (x0 == x1) {
+        // Infinite slope
+        draw_line_v5(p, q);
+    } else if (y0 == y1) {
+        // 0 slope
+        draw_line_v6(p, q);
+    } else {
+        double m = static_cast<double>((y1 - y0)) / (x1 - x0);
+
+        if (m < -1) {
+            draw_line_v4(p, q);
+        } else if (m < 0) {
+            draw_line_v3(p, q);
+        } else if (m < 1) {
+            draw_line_v1(p, q);
+        } else {
+            draw_line_v2(p, q);
+        }
+    }
+}
+
+}; // namespace draw
+
+}; // namespace rasterize
+
+/**
  * @brief Namespace for various test suites.
  */
 namespace tests {
@@ -264,41 +696,79 @@ void test_modeling_transforms() {
     std::cout << "[Tests] passed " << num_tests << " tests." << std::endl;
 }
 
+void test_drawing_functions() {
+    colors[0] = {244,89,66};
+    colors[1] = {66,122,244};
+    colors[2] = {66,89,244}; // dark blue
+
+    colors[3] = {0,0,0};
+    colors[4] = {122,66,244};
+
+    Vec3 p1 = {10,10,10,0};
+
+    Vec3 p2 = {200,600,500,1};
+
+    Vec3 p3 = {100,200, 300, 2};
+
+    Vec3 p4 = {400, 200, 200, 1};
+    Vec3 p5 = {300, 500, 300, 1};
+
+
+    // Draw first triangle
+    rasterize::draw::draw_line(p1, p2);
+    rasterize::draw::draw_line(p2, p3);
+    rasterize::draw::draw_line(p3, p1);
+
+    // Draw second triangle
+    rasterize::draw::draw_line(p1, p4);
+    rasterize::draw::draw_line(p4, p5);
+    rasterize::draw::draw_line(p5, p1);
+
+    // Draw third triangle
+
+    rasterize::draw::draw_line(p2,p3);
+    rasterize::draw::draw_line(p3,p4);
+    rasterize::draw::draw_line(p4,p5);
+    rasterize::draw::draw_line(p5,p2);
+
+    // Draw a star
+    Vec3 s1 = {200,300,100, 1};
+    Vec3 s2 = {600,300,100, 2};
+    Vec3 s3 = {400,500,100, 3};
+    Vec3 s4 = {300,150,100, 4};
+    Vec3 s5 = {500,150,100, 5};
+
+    rasterize::draw::draw_line(s1,s2);
+    rasterize::draw::draw_line(s1,s5);
+    rasterize::draw::draw_line(s2,s4);
+    rasterize::draw::draw_line(s3,s4);
+    rasterize::draw::draw_line(s5,s3);
+
+
+    // Draw a square
+
+    Vec3 sq1 = {500, 500, 400, 1};
+    Vec3 sq2 = {500, 600, 400, 2};
+    Vec3 sq3 = {600, 500, 400, 3};
+    Vec3 sq4 = {600, 600, 400, 4};
+
+    rasterize::draw::draw_line(sq1,sq2);
+    rasterize::draw::draw_line(sq1,sq3);
+    rasterize::draw::draw_line(sq3,sq4);
+    rasterize::draw::draw_line(sq2,sq4);
+
+}
+
 }; // namespace tests
-
-Camera cameras[100];
-int numberOfCameras = 0;
-
-Model models[1000];
-int numberOfModels = 0;
-
-Color colors[100000];
-int numberOfColors = 0;
-
-Translation translations[1000];
-int numberOfTranslations = 0;
-
-Rotation rotations[1000];
-int numberOfRotations = 0;
-
-Scaling scalings[1000];
-int numberOfScalings = 0;
-
-Vec3 vertices[100000];
-int numberOfVertices = 0;
-
-Color backgroundColor;
-
-// backface culling setting, default disabled
-int backfaceCullingSetting = 0;
-
-Color **image;
-
 
 
 /*
 	Initializes image with background color
 */
+void viewportTransformation(double viewportMatrix[4][4], Camera cam);
+void projectionTransformation(double projectionMatrix[4][4], Camera cam);
+void cameraTransformation(double cameraMatrix[4][4], Camera cam);
+
 void initializeImage(Camera cam) {
     int i, j;
 
@@ -316,22 +786,12 @@ void initializeImage(Camera cam) {
 	You can define helper functions inside this file (rasterizer.cpp) only.
 	Using types in "hw2_types.h" and functions in "hw2_math_ops.cpp" will speed you up while working.
 */
-void modelingTransformation(Model model) {
-    // Have to keep new vertice coordinates afeter transformations.
-    Vec3 triangleVertices[model.numberOfTriangles][3];
-    
+void modelingTransformation(double modelTransMatrix[4][4], Model model) {
     // transformMatrix is the result of all the transform operations.
     // operationMatrix is a tmp matrix to hold new transform operation.
     double transformMatrix[4][4], operationMatrix[4][4], tmpMatrix[4][4];
     makeIdentityMatrix(transformMatrix);
     makeIdentityMatrix(operationMatrix);
-    
-    // Copy current vertices coordiates of the model.
-    for (int i = 0; i < model.numberOfTriangles; i++) {
-        triangleVertices[i][0] = vertices[model.triangles[i].vertexIds[0]];
-        triangleVertices[i][1] = vertices[model.triangles[i].vertexIds[1]];
-        triangleVertices[i][2] = vertices[model.triangles[i].vertexIds[2]];
-    }
     
     // Form the transform matrix which is going to be applied to all vertices.
     for (int i = 0; i < model.numberOfTransformations; i++) {
@@ -365,7 +825,75 @@ void modelingTransformation(Model model) {
 
     }
     
-    // Apply transformMatrix to all vertices.
+    equalizeMatrices(modelTransMatrix, transformMatrix);
+}
+
+void viewTransformation(double viewTransMatrix[4][4], Camera cam) {
+    double viewportMatrix[4][4], projectionMatrix[4][4], cameraMatrix[4][4];
+    double tmpMatrix[4][4];
+    
+    viewportTransformation(viewportMatrix, cam);
+    projectionTransformation(projectionMatrix, cam);
+    cameraTransformation(cameraMatrix, cam);
+    
+    multiplyMatrixWithMatrix(tmpMatrix, projectionMatrix, cameraMatrix);
+    multiplyMatrixWithMatrix(viewTransMatrix, viewportMatrix, tmpMatrix);
+}
+
+void viewportTransformation(double viewportMatrix[4][4], Camera cam) {
+    makeIdentityMatrix(viewportMatrix);
+    viewportMatrix[0][0] = cam.sizeX / 2.0;
+    viewportMatrix[1][1] = cam.sizeY / 2.0;
+    viewportMatrix[0][3] = (cam.sizeX - 1) / 2.0;
+    viewportMatrix[1][3] = (cam.sizeY - 1) / 2.0;
+}
+
+void projectionTransformation(double projectionMatrix[4][4], Camera cam) {
+    makeIdentityMatrix(projectionMatrix);
+    projectionMatrix[3][3] = 0;
+    projectionMatrix[0][0] = (2 * cam.n) / (cam.r - cam.l);
+    projectionMatrix[0][2] = - (cam.l + cam.r) / (cam.l - cam.r);
+    projectionMatrix[1][1] = (2 * cam.n) / (cam.t - cam.b);
+    projectionMatrix[1][2] = - (cam.b + cam.t) / (cam.b - cam.t);
+    projectionMatrix[2][2] = (cam.f + cam.n) / (cam.n - cam.f);
+    projectionMatrix[2][3] = - (2 * cam.f * cam.n) / (cam.f - cam.n);
+    projectionMatrix[3][2] = -1;
+}
+
+void cameraTransformation(double cameraMatrix[4][4], Camera cam) {
+    double tmpRot[4][4], tmpTrans[4][4];
+    makeIdentityMatrix(tmpRot);
+    makeIdentityMatrix(tmpTrans);
+    
+    tmpRot[0][0] = cam.u.x;
+    tmpRot[1][0] = cam.v.x;
+    tmpRot[2][0] = cam.w.x;
+    tmpRot[0][1] = cam.u.y;
+    tmpRot[1][1] = cam.v.y;
+    tmpRot[2][1] = cam.w.y;
+    tmpRot[0][2] = cam.u.z;
+    tmpRot[1][2] = cam.v.z;
+    tmpRot[2][2] = cam.w.z;
+    
+    tmpTrans[0][3] = -cam.pos.x;
+    tmpTrans[1][3] = -cam.pos.y;
+    tmpTrans[2][3] = -cam.pos.z;
+    
+    multiplyMatrixWithMatrix(cameraMatrix, tmpRot, tmpTrans);
+}
+
+void applyTransformations(Model model, double viewTransMatrix[4][4], double modelTransMatrix[4][4]) {
+    
+    // Copy current vertices coordiates of the model.
+    for (int i = 0; i < model.numberOfTriangles; i++) {
+        triangleVertices[i][0] = vertices[model.triangles[i].vertexIds[0]];
+        triangleVertices[i][1] = vertices[model.triangles[i].vertexIds[1]];
+        triangleVertices[i][2] = vertices[model.triangles[i].vertexIds[2]];
+    }
+    
+    double operationMatrix[4][4];
+    multiplyMatrixWithMatrix(operationMatrix, viewTransMatrix, modelTransMatrix);
+    
     double point[4], tmpVec[4];
     for (int i = 0; i < model.numberOfTriangles; i++) {
         for (int j = 0; j < 3; j++) {
@@ -374,14 +902,16 @@ void modelingTransformation(Model model) {
             point[2] = triangleVertices[i][j].z;
             point[3] = 1;
             
-            multiplyMatrixWithVec4d(tmpVec, transformMatrix, point);
+            multiplyMatrixWithVec4d(tmpVec, operationMatrix, point);
             
-            triangleVertices[i][j].x = tmpVec[0];
-            triangleVertices[i][j].y = tmpVec[1];
-            triangleVertices[i][j].z = tmpVec[2];
+            triangleVertices[i][j].x = tmpVec[0] / tmpVec[3];
+            triangleVertices[i][j].y = tmpVec[1] / tmpVec[3];
+            triangleVertices[i][j].z = tmpVec[2] / tmpVec[3];
         }
     }
-    
+}
+
+void printModelVertices(Model model) {
     // Print out transformed vertecies of each triangle of the model.
     for (int i = 0; i < model.numberOfTriangles; i++) {
         std::cout << "Triangle: " << i << std::endl;
@@ -398,13 +928,17 @@ void forwardRenderingPipeline(Camera cam) {
     // TODO: IMPLEMENT HERE
     //tests::test_modeling_transforms();
     
-    std::cout << "Number of models " << numberOfModels << std::endl;
     
-    // Transforms every model in the scene.
+    double viewTransMatrix[4][4];
+    double modelTransMatrix[4][4];
+    
+    viewTransformation(viewTransMatrix, cam);
+    
     for (int i = 0; i < numberOfModels; i++) {
-        modelingTransformation(models[i]);
+        modelingTransformation(modelTransMatrix, models[i]);
+        applyTransformations(models[i], viewTransMatrix, modelTransMatrix);
+        // printModelVertices(models[i]);
     }
-
 }
 
 
@@ -451,9 +985,12 @@ int main(int argc, char **argv) {
             }
         }
 
-
         // initialize image with basic values
         initializeImage(cameras[i]);
+
+
+        // Test the drawing functions
+        tests::test_drawing_functions();
 
         // do forward rendering pipeline operations
         forwardRenderingPipeline(cameras[i]);
