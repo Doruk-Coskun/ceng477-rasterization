@@ -205,9 +205,9 @@ namespace draw {
  * @param c The color to write
  */
 void draw_pixel(int x, int y, Color c) {
-    image[x][y].r = c.r;
-    image[x][y].g = c.g;
-    image[x][y].b = c.b;
+    image[x][y].r = c.r > 255 ? 255 : c.r;
+    image[x][y].g = c.g > 255 ? 255 : c.g;
+    image[x][y].b = c.b > 255 ? 255 : c.b;
 }
 
 /**
@@ -659,27 +659,28 @@ void draw_triangle(Vec3 p0, Vec3 p1, Vec3 p2) {
     int y_max = std::ceil(std::max(std::max(y0, y1), y2));
 
     double alpha, beta, gamma;
+    double f_alpha = draw::f_12(x1, y1, x2, y2, x0, y0);
+    double f_beta = draw::f_20(x2, y2, x0, y0, x1, y1);
+    double f_gamma = draw::f_01(x0, y0, x1, y1, x2, y2);
+
     Color c = {0,0,0};
 
     for (int y = y_min; y < y_max; y++) {
         for (int x = x_min; x < x_max; x++) {
             // Calculate alpha
             double f_12_xy = draw::f_12(x1, y1, x2, y2, x, y);
-            double f_12_x0y0 = draw::f_12(x1, y1, x2, y2, x0, y0);
-            alpha = f_12_xy / f_12_x0y0;
+            alpha = f_12_xy / f_alpha;
 
             // Calculate beta
             double f_20_xy = draw::f_20(x2, y2, x0, y0, x, y);
-            double f_20_x1y1 = draw::f_20(x2, y2, x0, y0, x1, y1);
-            beta = f_20_xy / f_20_x1y1;
+            beta = f_20_xy / f_beta;
 
             // Calculate gamma
             double f_01_xy = draw::f_01(x0, y0, x1, y1, x, y);
-            double f_01_x2y2 = draw::f_01(x0, y0, x1, y1, x2, y2);
-            gamma = f_01_xy / f_01_x2y2;
+            gamma = f_01_xy / f_gamma;
 
             // Check if inside
-            if (alpha > 0 && beta > 0 && gamma > 0) {
+            if (alpha >= 0 && beta >= 0 && gamma >= 0) {
                 Color c0 = colors[p0.colorId];
                 Color c1 = colors[p1.colorId];
                 Color c2 = colors[p2.colorId];
@@ -727,7 +728,7 @@ void rasterize(Model model) {
             Vec3 viewVector = normalizeVec3(multiplyVec3WithScalar(a, -1));
                 
             // No calculations.
-            if (dotProductVec3(normal, viewVector) > 0) {
+            if (dotProductVec3(normal, viewVector) >= 0) {
                 continue;
             }
                 
