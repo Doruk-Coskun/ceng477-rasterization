@@ -714,7 +714,7 @@ void draw_triangle(Vec3 p0, Vec3 p1, Vec3 p2) {
 
 }; // namespace draw
     
-void rasterize(Model model) {
+void rasterize(Model model, double viewTransMatrix[4][4], Camera cam) {
     for (int i = 0; i < model.numberOfTriangles; i++) {
         
         Vec3 a = triangleVertices[i][0];
@@ -725,7 +725,7 @@ void rasterize(Model model) {
         if (backfaceCullingSetting) {
                 
             Vec3 normal = normalizeVec3(crossProductVec3(subtractVec3(b, a), subtractVec3(c, a)));
-            Vec3 viewVector = normalizeVec3(multiplyVec3WithScalar(a, -1));
+            Vec3 viewVector = subtractVec3(a, cam.pos);
                 
             // No calculations.
             if (dotProductVec3(normal, viewVector) >= 0) {
@@ -734,6 +734,43 @@ void rasterize(Model model) {
                 
             // Rasterize.
             else {
+                
+                double point[4], tmpVec[4];
+                
+                point[0] = a.x;
+                point[1] = a.y;
+                point[2] = a.z;
+                point[3] = 1;
+                
+                multiplyMatrixWithVec4d(tmpVec, viewTransMatrix, point);
+                
+                a.x = tmpVec[0] / tmpVec[3];
+                a.y = tmpVec[1] / tmpVec[3];
+                a.z = tmpVec[2] / tmpVec[3];
+                
+                point[0] = b.x;
+                point[1] = b.y;
+                point[2] = b.z;
+                point[3] = 1;
+                
+                multiplyMatrixWithVec4d(tmpVec, viewTransMatrix, point);
+                
+                b.x = tmpVec[0] / tmpVec[3];
+                b.y = tmpVec[1] / tmpVec[3];
+                b.z = tmpVec[2] / tmpVec[3];
+                
+                point[0] = c.x;
+                point[1] = c.y;
+                point[2] = c.z;
+                point[3] = 1;
+                
+                multiplyMatrixWithVec4d(tmpVec, viewTransMatrix, point);
+                
+                c.x = tmpVec[0] / tmpVec[3];
+                c.y = tmpVec[1] / tmpVec[3];
+                c.z = tmpVec[2] / tmpVec[3];
+                
+                
                 // If model type = Solid then do triangle rasterization.
                 if (model.type) {
                     draw::draw_triangle(a, b, c);
@@ -750,6 +787,42 @@ void rasterize(Model model) {
             
         // backfaceCullingSetting = 0, no culling is done.
         else {
+            
+            double point[4], tmpVec[4];
+            
+            point[0] = a.x;
+            point[1] = a.y;
+            point[2] = a.z;
+            point[3] = 1;
+            
+            multiplyMatrixWithVec4d(tmpVec, viewTransMatrix, point);
+            
+            a.x = tmpVec[0] / tmpVec[3];
+            a.y = tmpVec[1] / tmpVec[3];
+            a.z = tmpVec[2] / tmpVec[3];
+            
+            point[0] = b.x;
+            point[1] = b.y;
+            point[2] = b.z;
+            point[3] = 1;
+            
+            multiplyMatrixWithVec4d(tmpVec, viewTransMatrix, point);
+            
+            b.x = tmpVec[0] / tmpVec[3];
+            b.y = tmpVec[1] / tmpVec[3];
+            b.z = tmpVec[2] / tmpVec[3];
+            
+            point[0] = c.x;
+            point[1] = c.y;
+            point[2] = c.z;
+            point[3] = 1;
+            
+            multiplyMatrixWithVec4d(tmpVec, viewTransMatrix, point);
+            
+            c.x = tmpVec[0] / tmpVec[3];
+            c.y = tmpVec[1] / tmpVec[3];
+            c.z = tmpVec[2] / tmpVec[3];
+            
             // If model type = Solid then do triangle rasterization.
             if (model.type) {
                 draw::draw_triangle(a, b, c);
@@ -1066,7 +1139,7 @@ void cameraTransformation(double cameraMatrix[4][4], Camera cam) {
     multiplyMatrixWithMatrix(cameraMatrix, tmpRot, tmpTrans);
 }
 
-void applyTransformations(Model model, double viewTransMatrix[4][4], double modelTransMatrix[4][4]) {
+void applyTransformations(Model model, double modelTransMatrix[4][4]) {
     
     // Copy current vertices coordiates of the model.
     for (int i = 0; i < model.numberOfTriangles; i++) {
@@ -1074,9 +1147,6 @@ void applyTransformations(Model model, double viewTransMatrix[4][4], double mode
         triangleVertices[i][1] = vertices[model.triangles[i].vertexIds[1]];
         triangleVertices[i][2] = vertices[model.triangles[i].vertexIds[2]];
     }
-    
-    double operationMatrix[4][4];
-    multiplyMatrixWithMatrix(operationMatrix, viewTransMatrix, modelTransMatrix);
     
     double point[4], tmpVec[4];
     for (int i = 0; i < model.numberOfTriangles; i++) {
@@ -1086,11 +1156,11 @@ void applyTransformations(Model model, double viewTransMatrix[4][4], double mode
             point[2] = triangleVertices[i][j].z;
             point[3] = 1;
             
-            multiplyMatrixWithVec4d(tmpVec, operationMatrix, point);
+            multiplyMatrixWithVec4d(tmpVec, modelTransMatrix, point);
             
-            triangleVertices[i][j].x = tmpVec[0] / tmpVec[3];
-            triangleVertices[i][j].y = tmpVec[1] / tmpVec[3];
-            triangleVertices[i][j].z = tmpVec[2] / tmpVec[3];
+            triangleVertices[i][j].x = tmpVec[0];
+            triangleVertices[i][j].y = tmpVec[1];
+            triangleVertices[i][j].z = tmpVec[2];
         }
     }
 }
@@ -1120,8 +1190,8 @@ void forwardRenderingPipeline(Camera cam) {
     
     for (int i = 0; i < numberOfModels; i++) {
         modelingTransformation(modelTransMatrix, models[i]);
-        applyTransformations(models[i], viewTransMatrix, modelTransMatrix);
-        rasterize::rasterize(models[i]);
+        applyTransformations(models[i], modelTransMatrix);
+        rasterize::rasterize(models[i], viewTransMatrix, cam);
     }
 }
 
