@@ -582,7 +582,7 @@ void draw_line(Vec3 p, Vec3 q) {
 }
 
 /**
- * @brief Calculates f_01, f_12, ...
+ * @brief Calculates f_01
  *
  * @param xp0 first x-subscript
  * @param yp0 first y-subscript
@@ -591,11 +591,45 @@ void draw_line(Vec3 p, Vec3 q) {
  * @param x  target x-coordinate
  * @param y  target y-coordinate
  *
- * @return f_xy(x,y)
+ * @return f_01(x,y)
  */
-double f_xy(int xp0, int yp0, int xp1, int yp1, int x, int y) {
+double f_01(int xp0, int yp0, int xp1, int yp1, int x, int y) {
     return (yp0 - yp1) * x + (xp1 - xp0) * y 
-        + (xp0 * yp1) - (xp1 - yp0);
+        + (xp0 * yp1) - (xp1 * yp0);
+}
+
+/**
+ * @brief Calculates f_12
+ *
+ * @param xp0 first x-subscript
+ * @param yp0 first y-subscript
+ * @param xp1 second x-subscript
+ * @param yp1 second y-subscript
+ * @param x  target x-coordinate
+ * @param y  target y-coordinate
+ *
+ * @return f_12(x,y)
+ */
+double f_12(int xp1, int yp1, int xp2, int yp2, int x, int y) {
+    return (yp1 - yp2) * x + (xp2 - xp1) * y 
+        + (xp1 * yp2) - (xp2 * yp1);
+}
+
+/**
+ * @brief Calculates f_01
+ *
+ * @param xp0 first x-subscript
+ * @param yp0 first y-subscript
+ * @param xp1 second x-subscript
+ * @param yp1 second y-subscript
+ * @param x  target x-coordinate
+ * @param y  target y-coordinate
+ *
+ * @return f_20(x,y)
+ */
+double f_20(int xp2, int yp2, int xp0, int yp0, int x, int y) {
+    return (yp2 - yp0) * x + (xp0 - xp2) * y 
+        + (xp2 * yp0) - (xp0 * yp2);
 }
 
 /**
@@ -629,18 +663,18 @@ void draw_triangle(Vec3 p0, Vec3 p1, Vec3 p2) {
     for (int y = y_min; y < y_max; y++) {
         for (int x = x_min; x < x_max; x++) {
             // Calculate alpha
-            double f_12_xy = draw::f_xy(x1, y1, x2, y2, x, y);
-            double f_12_x0y0 = draw::f_xy(x1, y1, x2, y2, x0, y0);
+            double f_12_xy = draw::f_12(x1, y1, x2, y2, x, y);
+            double f_12_x0y0 = draw::f_12(x1, y1, x2, y2, x0, y0);
             alpha = f_12_xy / f_12_x0y0;
 
             // Calculate beta
-            double f_20_xy = draw::f_xy(x2, y2, x0, y0, x, y);
-            double f_20_x1y1 = draw::f_xy(x2, y2, x0, y0, x1, y1);
+            double f_20_xy = draw::f_20(x2, y2, x0, y0, x, y);
+            double f_20_x1y1 = draw::f_20(x2, y2, x0, y0, x1, y1);
             beta = f_20_xy / f_20_x1y1;
 
             // Calculate gamma
-            double f_01_xy = draw::f_xy(x0, y0, x1, y1, x, y);
-            double f_01_x2y2 = draw::f_xy(x0, y0, x1, y1, x2, y2);
+            double f_01_xy = draw::f_01(x0, y0, x1, y1, x, y);
+            double f_01_x2y2 = draw::f_01(x0, y0, x1, y1, x2, y2);
             gamma = f_01_xy / f_01_x2y2;
 
             // Check if inside
@@ -650,17 +684,23 @@ void draw_triangle(Vec3 p0, Vec3 p1, Vec3 p2) {
                 Color c2 = colors[p2.colorId];
                 // Interpolate the colors
                 c.r = static_cast<int>(
+                        std::round(
                         alpha * c0.r +
                         beta * c1.r +
-                        gamma * c2.r);
+                        gamma * c2.r)
+                        );
                 c.g = static_cast<int>(
+                        std::round(
                         alpha * c0.g +
                         beta * c1.g +
-                        gamma * c2.g);
+                        gamma * c2.g)
+                        );
                 c.b = static_cast<int>(
+                        std::round(
                         alpha * c0.b +
                         beta * c1.b +
-                        gamma * c2.b);
+                        gamma * c2.b)
+                        );
                 // Draw it!
                 draw::draw_pixel(x, y, c);
             }
