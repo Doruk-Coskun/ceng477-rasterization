@@ -511,6 +511,7 @@ void draw_line_v6(Vec3 p, Vec3 q) {
 
     if (x0 > x1) {
         draw_line_v6(q, p);
+        return;
     }
 
     Color c0, c1;
