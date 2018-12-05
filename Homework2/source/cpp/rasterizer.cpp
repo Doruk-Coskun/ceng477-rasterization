@@ -7,6 +7,7 @@
 #include "hw2_math_ops.h"
 #include "hw2_file_ops.h"
 #include <iostream>
+#include <algorithm>
 
 #include <cassert>
 
@@ -580,6 +581,95 @@ void draw_line(Vec3 p, Vec3 q) {
     }
 }
 
+/**
+ * @brief Calculates f_01, f_12, ...
+ *
+ * @param xp0 first x-subscript
+ * @param yp0 first y-subscript
+ * @param xp1 second x-subscript
+ * @param yp1 second y-subscript
+ * @param x  target x-coordinate
+ * @param y  target y-coordinate
+ *
+ * @return f_xy(x,y)
+ */
+double f_xy(int xp0, int yp0, int xp1, int yp1, int x, int y) {
+    return (yp0 - yp1) * x + (xp1 - xp0) * y 
+        + (xp0 * yp1) - (xp1 - yp0);
+}
+
+/**
+ * @brief Draw a triangle with screen space coordinates
+ * p0, p1 and p2.
+ *
+ * @param p0 A Vec3
+ * @param p1 Another Vec3
+ * @param p2 Another Vec3
+ */
+void draw_triangle(Vec3 p0, Vec3 p1, Vec3 p2) {
+
+    int x0 = static_cast<int>(p0.x);
+    int x1 = static_cast<int>(p1.x);
+    int x2 = static_cast<int>(p2.x);
+
+    int y0 = static_cast<int>(p0.y);
+    int y1 = static_cast<int>(p1.y);
+    int y2 = static_cast<int>(p2.y);
+
+    // Get bounding boxes
+    int x_min = std::floor(std::min(std::min(x0, x1), x2));
+    int x_max = std::ceil(std::max(std::max(x0, x1), x2));
+
+    int y_min = std::floor(std::min(std::min(y0, y1), y2));
+    int y_max = std::ceil(std::max(std::max(y0, y1), y2));
+
+    double alpha, beta, gamma;
+    Color c = {0,0,0};
+
+    for (int y = y_min; y < y_max; y++) {
+        for (int x = x_min; x < x_max; x++) {
+            // Calculate alpha
+            double f_12_xy = draw::f_xy(x1, y1, x2, y2, x, y);
+            double f_12_x0y0 = draw::f_xy(x1, y1, x2, y2, x0, y0);
+            alpha = f_12_xy / f_12_x0y0;
+
+            // Calculate beta
+            double f_20_xy = draw::f_xy(x2, y2, x0, y0, x, y);
+            double f_20_x1y1 = draw::f_xy(x2, y2, x0, y0, x1, y1);
+            beta = f_20_xy / f_20_x1y1;
+
+            // Calculate gamma
+            double f_01_xy = draw::f_xy(x0, y0, x1, y1, x, y);
+            double f_01_x2y2 = draw::f_xy(x0, y0, x1, y1, x2, y2);
+            gamma = f_01_xy / f_01_x2y2;
+
+            // Check if inside
+            if (alpha > 0 && beta > 0 && gamma > 0) {
+                Color c0 = colors[p0.colorId];
+                Color c1 = colors[p1.colorId];
+                Color c2 = colors[p2.colorId];
+                // Interpolate the colors
+                c.r = static_cast<int>(
+                        alpha * c0.r +
+                        beta * c1.r +
+                        gamma * c2.r);
+                c.g = static_cast<int>(
+                        alpha * c0.g +
+                        beta * c1.g +
+                        gamma * c2.g);
+                c.b = static_cast<int>(
+                        alpha * c0.b +
+                        beta * c1.b +
+                        gamma * c2.b);
+                // Draw it!
+                draw::draw_pixel(x, y, c);
+            }
+        }
+    }
+
+}
+
+
 }; // namespace draw
 
 }; // namespace rasterize
@@ -713,23 +803,23 @@ void test_drawing_functions() {
     Vec3 p4 = {400, 200, 200, 1};
     Vec3 p5 = {300, 500, 300, 1};
 
+    // Fill in the first triangle
+    rasterize::draw::draw_triangle(p1, p3, p2);
 
     // Draw first triangle
     rasterize::draw::draw_line(p1, p2);
     rasterize::draw::draw_line(p2, p3);
     rasterize::draw::draw_line(p3, p1);
 
+    // Fill in the second triangle
+    rasterize::draw::draw_triangle(p1, p4, p5);
+
     // Draw second triangle
     rasterize::draw::draw_line(p1, p4);
     rasterize::draw::draw_line(p4, p5);
     rasterize::draw::draw_line(p5, p1);
 
-    // Draw third triangle
 
-    rasterize::draw::draw_line(p2,p3);
-    rasterize::draw::draw_line(p3,p4);
-    rasterize::draw::draw_line(p4,p5);
-    rasterize::draw::draw_line(p5,p2);
 
     // Draw a star
     Vec3 s1 = {200,300,100, 1};
