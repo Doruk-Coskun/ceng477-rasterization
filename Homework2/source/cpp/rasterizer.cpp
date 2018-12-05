@@ -726,8 +726,8 @@ void rasterize(Model model) {
             Vec3 viewVector = normalizeVec3(multiplyVec3WithScalar(a, -1));
                 
             // No calculations.
-            if (dotProductVec3(normal, viewVector) >= 0) {
-                return;
+            if (dotProductVec3(normal, viewVector) > 0) {
+                continue;
             }
                 
             // Rasterize.
