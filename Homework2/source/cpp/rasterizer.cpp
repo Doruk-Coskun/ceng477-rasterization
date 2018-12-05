@@ -420,9 +420,9 @@ void draw_line_v4(Vec3 p, Vec3 q) {
 
     // Directly compute color increment
     Color dc;
-    dc.r = (c1.r - c0.r) / (y1 - y0);
-    dc.g = (c1.g - c0.g) / (y1 - y0);
-    dc.b = (c1.b - c0.b) / (y1 - y0);
+    dc.r = -(c1.r - c0.r) / (y1 - y0);
+    dc.g = -(c1.g - c0.g) / (y1 - y0);
+    dc.b = -(c1.b - c0.b) / (y1 - y0);
 
     for (int y = y0; y > y1; y--) {
 
