@@ -711,7 +711,59 @@ void draw_triangle(Vec3 p0, Vec3 p1, Vec3 p2) {
 
 
 }; // namespace draw
+    
+void rasterize(Model model) {
+    for (int i = 0; i < model.numberOfTriangles; i++) {
+        
+        Vec3 a = triangleVertices[i][0];
+        Vec3 b = triangleVertices[i][1];
+        Vec3 c = triangleVertices[i][2];
+        
+        // Culling.
+        if (backfaceCullingSetting) {
+                
+            Vec3 normal = normalizeVec3(crossProductVec3(subtractVec3(b, a), subtractVec3(c, a)));
+            Vec3 viewVector = normalizeVec3(multiplyVec3WithScalar(a, -1));
+                
+            // No calculations.
+            if (dotProductVec3(normal, viewVector) >= 0) {
+                return;
+            }
+                
+            // Rasterize.
+            else {
+                // If model type = Solid then do triangle rasterization.
+                if (model.type) {
+                    draw::draw_triangle(a, b, c);
+                }
+                    
+                // Else model type = wireframe and do line rasterization.
+                else {
+                    draw::draw_line(a,b);
+                    draw::draw_line(b,c);
+                    draw::draw_line(c,a);
+                }
+            }
+        }
+            
+        // backfaceCullingSetting = 0, no culling is done.
+        else {
+            // If model type = Solid then do triangle rasterization.
+            if (model.type) {
+                draw::draw_triangle(a, b, c);
+            }
+            
+            // Else model type = wireframe and do line rasterization.
+            else {
+                draw::draw_line(a,b);
+                draw::draw_line(b,c);
+                draw::draw_line(c,a);
+            }
+        }
+    }
+}
 
+    
 }; // namespace rasterize
 
 /**
@@ -1067,7 +1119,7 @@ void forwardRenderingPipeline(Camera cam) {
     for (int i = 0; i < numberOfModels; i++) {
         modelingTransformation(modelTransMatrix, models[i]);
         applyTransformations(models[i], viewTransMatrix, modelTransMatrix);
-        // printModelVertices(models[i]);
+        rasterize::rasterize(models[i]);
     }
 }
 
@@ -1088,7 +1140,7 @@ int main(int argc, char **argv) {
 
     // TODO:
     // remove this later:
-    numberOfCameras = 1;
+//    numberOfCameras = 1;
     for (i = 0; i < numberOfCameras; i++) {
 
         // allocate memory for image
@@ -1120,7 +1172,7 @@ int main(int argc, char **argv) {
 
 
         // Test the drawing functions
-        tests::test_drawing_functions();
+//        tests::test_drawing_functions();
 
         // do forward rendering pipeline operations
         forwardRenderingPipeline(cameras[i]);
