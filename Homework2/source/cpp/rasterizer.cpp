@@ -770,6 +770,7 @@ void rasterize(Model model, double viewTransMatrix[4][4], Camera cam) {
                 c.y = tmpVec[1] / tmpVec[3];
                 c.z = tmpVec[2] / tmpVec[3];
                 
+                std::cout << a.x << ' ' << b.z << ' ' << c.z << std::endl << std::endl;
                 
                 // If model type = Solid then do triangle rasterization.
                 if (model.type) {
